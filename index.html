@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>马帮库存SKU申报价值看板</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <h1>马帮库存SKU申报价值看板</h1>
+      <p class="subtitle">按「采购价 → 建议申报价」阶梯判定 · 实际申报超过建议值自动标红异常 · <b>点下面任意卡片可单独查看该档</b></p>
+    </div>
+    <div class="actions">
+      <span id="syncInfo" class="sync-info"></span>
+      <button id="btnSync" class="btn primary">⟳ 同步数据</button>
+      <button id="btnSettings" class="btn ghost">⚙ 设置</button>
+    </div>
+  </header>
+
+  <section class="stats" id="stats">
+    <div class="card clickable" data-action="all" title="点击：查看全部 SKU（清空筛选）">
+      <div class="card-label">库存SKU总数</div>
+      <div class="card-value" id="statTotal">—</div>
+    </div>
+    <div class="card danger clickable" data-action="anomaly" title="点击：只看异常（申报 &gt; 建议值）">
+      <div class="card-label" id="labelAnomaly">异常数（申报 &gt; 建议值）</div>
+      <div class="card-value" id="statAnomaly">—</div>
+    </div>
+    <div class="card clickable" data-action="anomaly" title="点击：只看异常（申报 &gt; 建议值）">
+      <div class="card-label">异常占比</div>
+      <div class="card-value" id="statRate">—</div>
+    </div>
+    <div class="card clickable" data-action="sort:value_desc" title="点击：按申报价值 高→低 排序">
+      <div class="card-label">最高申报价值</div>
+      <div class="card-value" id="statMax">—</div>
+    </div>
+    <div class="card clickable" data-action="sort:diff_desc" title="点击：按超出建议值 高→低 排序">
+      <div class="card-label">超出建议值均值</div>
+      <div class="card-value" id="statExcess">—</div>
+    </div>
+  </section>
+
+  <section class="dist" id="dist"></section>
+
+  <section class="toolbar">
+    <label class="switch">
+      <input type="checkbox" id="chkAnomaly" />
+      <span>只看异常</span>
+    </label>
+    <input type="text" id="inpSearch" class="search" placeholder="搜索 SKU / 品名 / 报关编码 / 供应商…" />
+    <select id="selSort" class="select">
+      <option value="diff_desc">超出建议值 高→低</option>
+      <option value="diff_asc">超出建议值 低→高</option>
+      <option value="value_desc">申报价值 高→低</option>
+      <option value="value_asc">申报价值 低→高</option>
+      <option value="price_desc">采购价 高→低</option>
+      <option value="price_asc">采购价 低→高</option>
+      <option value="sku_asc">SKU 字母序</option>
+      <option value="modify_desc">最近修改优先</option>
+    </select>
+    <span id="filterPill" class="filter-pill" hidden></span>
+    <span id="resultCount" class="result-count"></span>
+  </section>
+
+  <main class="table-wrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>库存SKU</th>
+          <th>中文名称</th>
+          <th class="num">采购价</th>
+          <th class="num">建议申报价</th>
+          <th class="num">申报价值</th>
+          <th class="num">超出</th>
+          <th>申报品名(中)</th>
+          <th>申报品名(英)</th>
+          <th>报关编码</th>
+          <th class="num">重量(g)</th>
+          <th>供应商</th>
+          <th>状态</th>
+          <th>异常</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="pager">
+      <button id="btnPrev" class="btn ghost">上一页</button>
+      <span id="pageInfo"></span>
+      <button id="btnNext" class="btn ghost">下一页</button>
+    </div>
+  </main>
+
+  <!-- 设置弹窗 -->
+  <div class="modal-mask" id="settingsModal" hidden>
+    <div class="modal">
+      <h2>设置</h2>
+      <div id="cfgCreds">
+        <div class="form-row">
+          <label>马帮 AppKey</label>
+          <input type="text" id="cfgAppkey" placeholder="开发者后台获取" />
+        </div>
+        <div class="form-row">
+          <label>马帮 App密钥</label>
+          <input type="password" id="cfgAppsecret" placeholder="留空表示不修改" />
+        </div>
+        <div class="form-row">
+          <label>同步窗口天数</label>
+          <input type="number" id="cfgWindow" step="1" min="1" max="365" value="7" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>异常判定规则（固定口径，随采购价浮动）</label>
+        <table class="rule-table" id="ruleTable"></table>
+      </div>
+
+      <p class="hint">判定口径：实际申报价值 <b>严格大于</b> 该 SKU 采购价对应的建议申报价 → 判为异常。本看板仅调用马帮「库存SKU查询」只读接口，不会修改任何数据。</p>
+      <div class="modal-actions">
+        <button id="btnCfgCancel" class="btn ghost">关闭</button>
+        <button id="btnCfgSave" class="btn primary">保存</button>
+      </div>
+      <p id="cfgMsg" class="cfg-msg"></p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="snapshot-core.js"></script>
+  <script src="snapshot-items-0.js"></script>
+  <script src="snapshot-items-1.js"></script>
+  <script src="snapshot-items-2.js"></script>
+  <script src="snapshot-items-3.js"></script>
+  <script src="snapshot-items-4.js"></script>
+  <script src="snapshot-items-5.js"></script>
+  <script src="snapshot-items-6.js"></script>
+  <script src="snapshot-items-7.js"></script>
+  <script src="snapshot-items-8.js"></script>
+  <script src="snapshot-items-9.js"></script>
+  <script src="snapshot-items-10.js"></script>
+  <script src="snapshot-items-11.js"></script>
+  <script src="snapshot-items-final.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
